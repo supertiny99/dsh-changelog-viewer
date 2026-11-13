@@ -44,20 +44,20 @@ DSH（DeepSeek Harness）客户端版本更新日志与更新前置确认插件�
 
 或指定特定版本号：
 ```
-@supertiny99/dsh-changelog-viewer@0.1.0
+@supertiny99/dsh-changelog-viewer@0.1.1
 ```
 
 ### 2. GitHub（源码 / Tag 安装）
 
 ```
-github:supertiny99/dsh-changelog-viewer#v0.1.0
+github:supertiny99/dsh-changelog-viewer#v0.1.1
 ```
 
 ### 3. tarball（本地离线分发）
 
 从 [GitHub Releases](https://github.com/supertiny99/dsh-changelog-viewer/releases) 下载 `.tgz` 产物后填入本地绝对路径：
 ```
-file:/<你的本地绝对路径>/supertiny99-dsh-changelog-viewer-0.1.0.tgz
+file:/<你的本地绝对路径>/supertiny99-dsh-changelog-viewer-0.1.1.tgz
 ```
 
 > **环境要求**：DSH `>= 0.2.1-rc.5`（`engines.dsh` 自动合规校验）。  
