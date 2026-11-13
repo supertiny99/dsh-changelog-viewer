@@ -32,27 +32,47 @@ DSH（DeepSeek Harness）客户端版本更新日志与更新前置确认插件�
 
 ---
 
-## 📦 安装与配置
+## 📦 安装与使用
 
-### 方式 A：通过本地链接或 tgz 安装
+在 DSH 桌面端「设置 / 插件管理 → 添加插件」，任选一种 spec（**推荐使用 npm**）：
 
-在本地 profile（`~/.dsh/profiles/desktop`）的 `package.json` 添加依赖：
+### 1. npm（主力推荐，一键在线安装）
 
-```json
-{
-  "dependencies": {
-    "@supertiny99/dsh-changelog-viewer": "link:/path/to/changelog-viewer"
-  }
-}
+```
+@supertiny99/dsh-changelog-viewer
 ```
 
-在 `cordis.patch.yml` 中激活 bundle：
-
-```yaml
-- insert:
-    - id: changelog-viewer
-      name: '@supertiny99/dsh-changelog-viewer'
+或指定特定版本号：
 ```
+@supertiny99/dsh-changelog-viewer@0.1.0
+```
+
+### 2. GitHub（源码 / Tag 安装）
+
+```
+github:supertiny99/dsh-changelog-viewer#v0.1.0
+```
+
+### 3. tarball（本地离线分发）
+
+从 [GitHub Releases](https://github.com/supertiny99/dsh-changelog-viewer/releases) 下载 `.tgz` 产物后填入本地绝对路径：
+```
+file:/<你的本地绝对路径>/supertiny99-dsh-changelog-viewer-0.1.0.tgz
+```
+
+> **环境要求**：DSH `>= 0.2.1-rc.5`（`engines.dsh` 自动合规校验）。  
+> **生效说明**：在插件管理页添加插件后，退出并重启 DSH 客户端（冷启动）即可激活。
+
+---
+
+## 🎯 使用指南
+
+1. **查阅版本更新日志**：
+   打开 DSH 桌面端 → **设置** → 进入 **版本更新日志**，即可浏览全部版本的发布日志，支持中英双语切换（中文 / English / 全部）、Markdown 富文本渲染及全屏大窗口展开。
+
+2. **更新前置安全把控**：
+   - **左下角原生更新接管**：在 DSH 客户端任意页面点击左下角（设置/更多旁）的原生更新按钮时，插件自动拦截后台直接下载行为，并在屏幕正中央弹出版本更新重点审阅弹窗；
+   - **两阶段明确确认**：用户点击【暂不更新】安全退出、绝不发起网络下载；点击【确认下载并更新】后才真正放行调起底层升级。
 
 ---
 
