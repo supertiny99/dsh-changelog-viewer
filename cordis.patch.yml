@@ -1,0 +1,3 @@
+- insert:
+    - id: changelog-viewer
+      name: '@supertiny99/dsh-changelog-viewer'

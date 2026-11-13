@@ -1,0 +1,6 @@
+node_modules/
+node_modules
+*.tgz
+.DS_Store
+.releases-cache.json
+dist/meta.json
