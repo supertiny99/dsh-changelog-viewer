@@ -39,7 +39,10 @@ DSH（DeepSeek Harness）客户端版本更新日志与更新前置确认插件�
    - 面板顶部展示高亮横幅提示：“发现 DSH 官方新版本已就绪”；
    - 弹窗内完整呈现本次更新的核心变动说明与安全注意事项；
    - 底部提供双向明确操作：【暂不更新】（安全关闭，绝不触发下载）与【确认下载并更新】（经用户确认后才真正调起宿主更新流程）。
-5. **官方规范与双主题自适应**：
+5. **宿主真实版本动态探针与重启瞬时自愈**：
+   - 集成系统级 App Bundle 清单（macOS Info.plist / Windows 清单）与官方包运行时依赖动态解析；
+   - 磁盘缓存与运行时状态彻底解耦，升级并重启应用后瞬时刷新当前安装版本，无感知自愈。
+6. **官方规范与双主题自适应**：
    - 严格遵守 `docs/ui-style-guide.md` 规范，所有色值基于 `--dsw-alias-*` token 别名层；
    - 自适应 DSH 浅色与深色主题，文字黑白清晰高对比，排版无截断断行。
 
@@ -57,20 +60,20 @@ DSH（DeepSeek Harness）客户端版本更新日志与更新前置确认插件�
 
 或指定特定版本号：
 ```
-@supertiny99/dsh-changelog-viewer@0.1.1
+@supertiny99/dsh-changelog-viewer@0.1.2
 ```
 
 ### 2. GitHub（源码 / Tag 安装）
 
 ```
-github:supertiny99/dsh-changelog-viewer#v0.1.1
+github:supertiny99/dsh-changelog-viewer#v0.1.2
 ```
 
 ### 3. tarball（本地离线分发）
 
 从 [GitHub Releases](https://github.com/supertiny99/dsh-changelog-viewer/releases) 下载 `.tgz` 产物后填入本地绝对路径：
 ```
-file:/<你的本地绝对路径>/supertiny99-dsh-changelog-viewer-0.1.1.tgz
+file:/<你的本地绝对路径>/supertiny99-dsh-changelog-viewer-0.1.2.tgz
 ```
 
 > **环境要求**：DSH `>= 0.2.1-rc.5`（`engines.dsh` 自动合规校验）。  

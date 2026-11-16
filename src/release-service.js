@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -12,7 +13,7 @@ const DEFAULT_TTL_MS = 30 * 60 * 1000; // 30 分钟缓存
  * 从 tag 或 name 中提取规范语义版本号，如 'dsh-v0.2.2-rc.2' -> '0.2.2-rc.2'
  */
 export function normalizeVersion(tagOrName = '') {
-	return tagOrName.replace(/^dsh-v?/i, '').replace(/^v/i, '').trim();
+	return String(tagOrName).replace(/^dsh-v?/i, '').replace(/^v/i, '').trim();
 }
 
 /**
@@ -106,13 +107,88 @@ export function compareSemver(v1, v2) {
 	return 0;
 }
 
+/**
+ * 动态多层探测宿主 DSH 客户端实际安装并运行的版本
+ */
+export function detectHostVersion(options = {}) {
+	const env = options.env || process.env;
+
+	// 1. 显式环境变量覆盖（支持测试与外部配置）
+	if (env.DSH_CLIENT_VERSION) {
+		return normalizeVersion(env.DSH_CLIENT_VERSION);
+	}
+	if (env.DSH_VERSION) {
+		return normalizeVersion(env.DSH_VERSION);
+	}
+
+	// 2. 原生桌面客户端 App Bundle 清单探测（macOS Info.plist / Windows 等真实安装包元数据）
+	// 用户升级客户端并重启后，系统级 App Bundle 清单会被 Electron 安装器立即覆写，最具权威性
+	try {
+		const macPaths = [
+			process.execPath ? join(dirname(dirname(process.execPath)), 'Info.plist') : null,
+			'/Applications/DeepSeek Harness.app/Contents/Info.plist',
+		].filter(Boolean);
+
+		for (const p of macPaths) {
+			if (existsSync(p)) {
+				const content = readFileSync(p, 'utf8');
+				const match = content.match(/<key>CFBundleShortVersionString<\/key>[\s\n]*<string>([^<]+)<\/string>/i);
+				if (match && match[1]) {
+					return normalizeVersion(match[1]);
+				}
+			}
+		}
+	} catch (_) {}
+
+	// 3. 借由 createRequire 解析宿主官方核心包 package.json
+	const candidateBasePaths = [
+		__dirname,
+		process.cwd(),
+	];
+	if (env.HOME) {
+		candidateBasePaths.push(join(env.HOME, '.dsh/profiles/desktop'));
+	}
+	if (Array.isArray(process.argv)) {
+		for (const arg of process.argv) {
+			if (typeof arg === 'string' && (arg.includes('node_modules') || arg.includes('app.asar') || arg.includes('.dsh'))) {
+				candidateBasePaths.push(dirname(arg));
+			}
+		}
+	}
+
+	const specs = [
+		'@deepseek-ai/dsh',
+		'@deepseek-ai/dsh-base',
+		'@deepseek-ai/dsh-web-app',
+		'@deepseek-ai/dsh-desktop-host',
+	];
+
+	for (const basePath of candidateBasePaths) {
+		try {
+			const req = createRequire(basePath.startsWith('file:') ? basePath : join(basePath, 'package.json'));
+			for (const spec of specs) {
+				try {
+					const pkg = req(spec + '/package.json');
+					if (pkg?.version) {
+						return normalizeVersion(pkg.version);
+					}
+				} catch (_) {}
+			}
+		} catch (_) {}
+	}
+
+	// 4. 安全兜底版本
+	return '0.2.2-rc.3';
+}
+
 export class ReleaseService {
 	constructor(options = {}) {
 		this.apiUrl = options.apiUrl || GITHUB_RELEASES_URL;
 		this.ttlMs = options.ttlMs || DEFAULT_TTL_MS;
 		this.cacheFile = options.cacheFile || join(__dirname, '../.releases-cache.json');
 		this.seedFile = options.seedFile || join(__dirname, 'seed-releases.json');
-		this.cachedPayload = null;
+		this.cachedStaticData = null;
+		this.detectVersionFn = options.detectVersionFn || detectHostVersion;
 	}
 
 	/**
@@ -131,13 +207,16 @@ export class ReleaseService {
 	}
 
 	/**
-	 * 读取本地磁盘缓存
+	 * 读取本地磁盘缓存（兼容旧格式，并保留静态 release 列表与 etag 等）
 	 */
 	readDiskCache() {
 		try {
 			if (existsSync(this.cacheFile)) {
 				const raw = readFileSync(this.cacheFile, 'utf8');
-				return JSON.parse(raw);
+				const parsed = JSON.parse(raw);
+				if (parsed && Array.isArray(parsed.releases)) {
+					return parsed;
+				}
 			}
 		} catch (err) {
 			console.warn('[ReleaseService] Failed to read disk cache:', err.message);
@@ -146,44 +225,64 @@ export class ReleaseService {
 	}
 
 	/**
-	 * 写入本地磁盘缓存
+	 * 写入本地磁盘缓存（只持久化静态数据，不绑定临时运行时状态）
 	 */
 	writeDiskCache(data) {
 		try {
 			const dir = dirname(this.cacheFile);
 			if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-			writeFileSync(this.cacheFile, JSON.stringify(data, null, 2), 'utf8');
+			// 剥离运行时标记后再存盘
+			const strippedReleases = (data.releases || []).map((r) => {
+				const { isCurrent, ...rest } = r;
+				return rest;
+			});
+			const payloadToSave = {
+				etag: data.etag || null,
+				lastModified: data.lastModified || null,
+				lastFetchedAt: data.lastFetchedAt || Date.now(),
+				releases: strippedReleases,
+			};
+			writeFileSync(this.cacheFile, JSON.stringify(payloadToSave, null, 2), 'utf8');
 		} catch (err) {
 			console.warn('[ReleaseService] Failed to write disk cache:', err.message);
 		}
 	}
 
 	/**
-	 * 格式化输出 releases 列表与元数据
+	 * 将原始 release 列表格式化为标准字段
 	 */
-	formatPayload(rawReleases = [], source = 'network', etag = null, lastModified = null) {
-		const currentVersion = process.env.DSH_CLIENT_VERSION || '0.2.1-rc.5';
-
-		const releases = rawReleases.map((item) => {
-			const version = normalizeVersion(item.tag_name || item.name);
-			const { bodyCn, bodyEn, highlights } = parseReleaseBody(item.body);
-			const isCurrent = normalizeVersion(currentVersion) === version;
+	formatRawReleases(rawReleases = []) {
+		return rawReleases.map((item) => {
+			const version = normalizeVersion(item.tag_name || item.name || item.version);
+			const { bodyCn, bodyEn, highlights } = parseReleaseBody(item.body || item.rawBody);
 
 			return {
-				id: item.id || item.tag_name,
-				tag: item.tag_name,
+				id: item.id || item.tag_name || version,
+				tag: item.tag_name || item.tag || `v${version}`,
 				version,
-				name: item.name || item.tag_name,
-				publishedAt: item.published_at || new Date().toISOString(),
-				isPrerelease: !!item.prerelease,
-				htmlUrl: item.html_url || `https://github.com/deepseek-ai/deepseek-harness/releases/tag/${item.tag_name}`,
-				bodyCn,
-				bodyEn,
-				rawBody: item.body || '',
-				highlights,
-				isCurrent,
+				name: item.name || item.tag_name || `v${version}`,
+				publishedAt: item.published_at || item.publishedAt || new Date().toISOString(),
+				isPrerelease: !!(item.prerelease || item.isPrerelease),
+				htmlUrl: item.html_url || item.htmlUrl || `https://github.com/deepseek-ai/deepseek-harness/releases/tag/${item.tag_name || item.tag}`,
+				bodyCn: item.bodyCn || bodyCn,
+				bodyEn: item.bodyEn || bodyEn,
+				rawBody: item.rawBody || item.body || '',
+				highlights: item.highlights || highlights,
 			};
 		});
+	}
+
+	/**
+	 * 动态装配模式：结合实时宿主探测版本，动态派生 isCurrent / hasUpdate
+	 */
+	assemblePayload(staticData = {}, source = 'network') {
+		const currentVersion = this.detectVersionFn();
+		const formattedReleases = this.formatRawReleases(staticData.releases || []);
+
+		const releases = formattedReleases.map((item) => ({
+			...item,
+			isCurrent: normalizeVersion(item.version) === normalizeVersion(currentVersion),
+		}));
 
 		const latestRelease = releases[0] || null;
 		const latestVersion = latestRelease ? latestRelease.version : currentVersion;
@@ -195,29 +294,29 @@ export class ReleaseService {
 			latestVersion,
 			hasUpdate,
 			source,
-			etag,
-			lastModified,
-			lastFetchedAt: Date.now(),
+			etag: staticData.etag || null,
+			lastModified: staticData.lastModified || null,
+			lastFetchedAt: staticData.lastFetchedAt || Date.now(),
 			releases,
 		};
 	}
 
 	/**
-	 * 获取 Release 列表数据（带缓存、条件请求与离线兜底）
+	 * 获取 Release 列表数据（带缓存、条件请求与离线兜底，且始终动态装配真实当前版本）
 	 */
 	async getReleases(force = false) {
 		const now = Date.now();
 
-		// 1. 若内存中有有效未过期缓存且未要求强制刷新，直接返回
-		if (!force && this.cachedPayload && now - this.cachedPayload.lastFetchedAt < this.ttlMs) {
-			return { ...this.cachedPayload, source: 'memory' };
+		// 1. 若内存中有有效未过期静态缓存且未要求强制刷新，动态装配后返回
+		if (!force && this.cachedStaticData && now - (this.cachedStaticData.lastFetchedAt || 0) < this.ttlMs) {
+			return this.assemblePayload(this.cachedStaticData, 'memory');
 		}
 
 		// 2. 检查磁盘缓存
 		const diskCache = this.readDiskCache();
 		if (!force && diskCache && now - (diskCache.lastFetchedAt || 0) < this.ttlMs) {
-			this.cachedPayload = diskCache;
-			return { ...diskCache, source: 'disk' };
+			this.cachedStaticData = diskCache;
+			return this.assemblePayload(diskCache, 'disk');
 		}
 
 		// 3. 发起网络请求获取最新 Releases（带 ETag 条件请求）
@@ -238,12 +337,12 @@ export class ReleaseService {
 			});
 			clearTimeout(timeout);
 
-			// 304 未更改：直接续期现有缓存并返回
+			// 304 未更改：直接续期现有缓存并动态装配返回
 			if (response.status === 304 && diskCache) {
 				diskCache.lastFetchedAt = now;
 				this.writeDiskCache(diskCache);
-				this.cachedPayload = diskCache;
-				return { ...diskCache, source: 'network-304' };
+				this.cachedStaticData = diskCache;
+				return this.assemblePayload(diskCache, 'network-304');
 			}
 
 			// 200 成功：解析并写入缓存
@@ -252,11 +351,16 @@ export class ReleaseService {
 				if (Array.isArray(json) && json.length > 0) {
 					const etag = response.headers.get('etag');
 					const lastModified = response.headers.get('last-modified');
-					const payload = this.formatPayload(json, 'network', etag, lastModified);
+					const newStaticData = {
+						etag,
+						lastModified,
+						lastFetchedAt: now,
+						releases: this.formatRawReleases(json),
+					};
 
-					this.cachedPayload = payload;
-					this.writeDiskCache(payload);
-					return payload;
+					this.cachedStaticData = newStaticData;
+					this.writeDiskCache(newStaticData);
+					return this.assemblePayload(newStaticData, 'network');
 				}
 			}
 
@@ -267,14 +371,20 @@ export class ReleaseService {
 
 		// 4. 网络失败或被限流：回退到磁盘缓存
 		if (diskCache) {
-			return { ...diskCache, source: 'fallback-disk', isStale: true };
+			this.cachedStaticData = diskCache;
+			const stalePayload = this.assemblePayload(diskCache, 'fallback-disk');
+			stalePayload.isStale = true;
+			return stalePayload;
 		}
 
 		// 5. 极端首次断网：回退到静态内置种子数据
 		const seedData = this.loadSeedData();
-		const fallbackPayload = this.formatPayload(seedData, 'seed');
-		this.cachedPayload = fallbackPayload;
-		return fallbackPayload;
+		const fallbackStaticData = {
+			lastFetchedAt: now,
+			releases: this.formatRawReleases(seedData),
+		};
+		this.cachedStaticData = fallbackStaticData;
+		return this.assemblePayload(fallbackStaticData, 'seed');
 	}
 
 	/**

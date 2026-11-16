@@ -277,6 +277,21 @@ function ChangelogSettingsSection() {
 		fetchReleases(false);
 	}, [fetchReleases]);
 
+	// 监听窗口重新聚焦与可见性变化，实现生命周期自愈（升级重启或切回后立即刷新当前版本）
+	useEffect(() => {
+		const handleSync = () => {
+			if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+				fetchReleases(false);
+			}
+		};
+		window.addEventListener('focus', handleSync);
+		document.addEventListener('visibilitychange', handleSync);
+		return () => {
+			window.removeEventListener('focus', handleSync);
+			document.removeEventListener('visibilitychange', handleSync);
+		};
+	}, [fetchReleases]);
+
 	// 监听 Electron 桌面端原生更新状态
 	useEffect(() => {
 		const carrier = window.dshDesktop?.updates;
