@@ -6,6 +6,19 @@ DSH（DeepSeek Harness）客户端版本更新日志与更新前置确认插件�
 
 ---
 
+## 📸 界面预览
+
+| 设置页版本日志面板 | 更新拦截与前置确认弹窗 |
+| :---: | :---: |
+| <img src="docs/screenshots/settings-changelog-panel.png" width="440" alt="设置页版本日志面板" /> | <img src="docs/screenshots/update-intercept-dialog.png" width="440" alt="更新拦截与前置确认弹窗" /> |
+
+<p align="center">
+  <img src="docs/screenshots/changelog-detail-modal.png" width="620" alt="完整发布说明弹窗" /><br />
+  <em>▲ 完整发布说明模态弹窗（支持中英双语切换、富文本排版与官方 GitHub Release 直达）</em>
+</p>
+
+---
+
 ## ✨ 核心特性
 
 1. **官方 Release 日志聚合与智能缓存**：
