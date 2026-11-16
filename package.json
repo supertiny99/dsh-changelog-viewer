@@ -51,7 +51,8 @@
 	],
 	"scripts": {
 		"build": "node scripts/build.mjs && node scripts/selfcheck.mjs",
-		"test": "node tests/release-service.spec.mjs && node tests/test-host.mjs && node tests/test-client.mjs"
+		"test": "node tests/release-service.spec.mjs && node tests/test-host.mjs && node tests/test-client.mjs",
+		"preflight": "node scripts/preflight.mjs"
 	},
 	"devDependencies": {
 		"esbuild": "^0.25.10"
