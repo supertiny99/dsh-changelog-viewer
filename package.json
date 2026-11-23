@@ -1,6 +1,6 @@
 {
 	"name": "@supertiny99/dsh-changelog-viewer",
-	"version": "0.1.2",
+	"version": "0.1.3",
 	"description": "DSH 版本更新日志与更新前置确认：聚合官方 Release 日志，在客户端提供独立 Changelog 浏览器；当官方发布新版本时，提供先查阅变更再决定下载升级的两阶段安全控制。",
 	"type": "module",
 	"main": "src/index.js",
@@ -51,7 +51,7 @@
 	],
 	"scripts": {
 		"build": "node scripts/build.mjs && node scripts/selfcheck.mjs",
-		"test": "node tests/release-service.spec.mjs && node tests/test-host.mjs && node tests/test-client.mjs",
+		"test": "node tests/feed-service.spec.mjs && node tests/release-service.spec.mjs && node tests/test-host.mjs && node tests/test-client.mjs",
 		"preflight": "node scripts/preflight.mjs"
 	},
 	"devDependencies": {

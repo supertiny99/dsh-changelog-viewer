@@ -111,6 +111,25 @@
 	border: 1px solid rgba(245, 158, 11, 0.25);
 }
 
+/* 官方更新源同步状态徽标（cl-CHG-003 三态：已推送 / 未推送 / 未知） */
+.cl-badge-sync-pushed {
+	background-color: rgba(16, 185, 129, 0.15);
+	color: var(--dsw-alias-intent-success, #10b981);
+	border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.cl-badge-sync-pending {
+	background-color: rgba(245, 158, 11, 0.15);
+	color: var(--dsw-alias-intent-warning, #f59e0b);
+	border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.cl-badge-sync-unknown {
+	background-color: var(--cl-bg-subtle, rgba(0, 0, 0, 0.02));
+	color: var(--cl-ink3, #71717a);
+	border: 1px solid var(--cl-line, rgba(0, 0, 0, 0.08));
+}
+
 .cl-refresh-btn {
 	background: transparent;
 	border: 1px solid var(--cl-line);
@@ -387,6 +406,11 @@
 	font-size: 12.5px;
 	color: var(--cl-ink);
 	line-height: 1.5;
+}
+
+/* 弹窗双提示块紧排（升级把控提醒 + 官方更新源状态） */
+.cl-modal-notice + .cl-modal-notice {
+	margin-top: -4px;
 }
 
 .cl-highlights-title {

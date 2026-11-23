@@ -62,6 +62,8 @@ console.log(`  ✓ detectHostVersion 动态探针正常 (探测到真实宿主�
 const testService = new ReleaseService({
 	apiUrl: 'https://invalid.upstream.for.testing.local', // 故意无效，触发兜底
 	cacheFile: '/tmp/test-releases-cache.json',
+	// feed 探针确定性注入：失败态（unknown 静默降级，不影响列表返回，AC4）
+	feedProbe: { ensureFresh: async () => ({ state: 'unavailable', reason: 'unit-test', lastFetchedAt: Date.now() }) },
 });
 
 const result = await testService.getReleases(true);
@@ -70,6 +72,8 @@ assert.ok(Array.isArray(result.releases));
 assert.ok(result.releases.length > 0);
 assert.ok(result.releases[0].version);
 assert.ok(['seed', 'disk', 'fallback-disk'].includes(result.source));
+assert.equal(result.feed.state, 'unavailable', '探针失败态必须透传到 payload.feed');
+assert.ok(result.releases.every((r) => r.syncState === 'unknown'), '探针失败时全部条目必须静默降级 unknown');
 console.log(`  ✓ ReleaseService 兜底生效，成功获取 ${result.releases.length} 条记录 (source: ${result.source})`);
 
 // 6. 测试 getReleaseByTag
@@ -85,6 +89,7 @@ const dynamicService = new ReleaseService({
 	apiUrl: 'https://invalid.upstream.for.testing.local',
 	cacheFile: '/tmp/test-dynamic-cache.json',
 	detectVersionFn: () => currentSimulatedVersion,
+	feedProbe: { ensureFresh: async () => ({ state: 'unavailable', reason: 'unit-test', lastFetchedAt: Date.now() }) },
 });
 
 // 7.1 升级前请求
@@ -104,5 +109,40 @@ assert.equal(afterUpgrade.hasUpdate, false, '升级重启后，已是最新版�
 const latestReleaseItemAfter = afterUpgrade.releases.find((r) => r.version === latestVer);
 assert.equal(latestReleaseItemAfter.isCurrent, true, '升级重启后，最新版本项必须标记为 isCurrent: true');
 console.log('  ✓ 升级重启前后版本即时自愈验证完全通过 (0.2.1-rc.5 -> ' + latestVer + ')');
+
+// 8. feed 三态注入：pushed / pending 端到端映射（cl-CHG-003 AC2）
+console.log('🧪 开始 feed 同步状态三态映射测试...');
+const mkFeedService = (feedVersion) =>
+	new ReleaseService({
+		apiUrl: 'https://invalid.upstream.for.testing.local',
+		cacheFile: `/tmp/test-feed-state-${feedVersion}.json`,
+		feedProbe: {
+			ensureFresh: async () => ({
+				state: 'ok',
+				version: feedVersion,
+				stagingPercentage: 100,
+				channel: 'nightly',
+				lastFetchedAt: Date.now(),
+			}),
+		},
+	});
+
+// 8.1 feed == 最新版 → 最新条目 pushed
+const pushedPayload = await mkFeedService(latestVer).getReleases(true);
+assert.equal(pushedPayload.feed.state, 'ok');
+assert.equal(pushedPayload.feed.version, latestVer);
+assert.equal(
+	pushedPayload.releases.find((r) => r.version === latestVer).syncState,
+	'pushed',
+	'feed 版本等于最新版时该条必须判 pushed'
+);
+
+// 8.2 feed 滞后于最新版（公告先行场景）→ 最新条目 pending
+const pendingPayload = await mkFeedService('0.0.1').getReleases(true);
+assert.ok(
+	pendingPayload.releases.every((r) => r.syncState === 'pending'),
+	'feed 版本落后于全部条目时必须全判 pending（尚未推送）'
+);
+console.log('  ✓ feed 三态映射正常（feed=最新→pushed；feed 滞后→全 pending）');
 
 console.log('🎉 ReleaseService 全部单测通过！');

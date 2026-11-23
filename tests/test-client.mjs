@@ -176,4 +176,17 @@ assert.equal(stopped, true, '必须立即阻断事件冒泡与后续分发 (stop
 assert.equal(prevented, true, '必须阻止浏览器默认行为 (preventDefault)');
 console.log('  ✓ 原生更新事件捕获拦截成功：冒泡彻底阻断，已转交全局前置确认弹窗');
 
+// cl-CHG-003 契约：官方更新源同步状态三态 UI 接线
+// （dist 为 esbuild minify 产物，中文以 \uXXXX 转义存在、变量会被重命名，断言前先还原转义并只对稳定标记断言）
+console.log('🧪 开始官方更新源同步状态（feed sync state）接线测试...');
+const plain = source.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)));
+assert.ok(plain.includes('官方更新源：') && plain.includes('cl-modal-notice-feed'), '弹窗必须包含官方更新源状态行');
+assert.ok(plain.includes('尚未推送，暂不可更新'), 'pending 态必须切换主按钮文案（禁用分支独占文案，AC3）');
+assert.ok(
+	['cl-badge-sync-pushed', 'cl-badge-sync-pending', 'cl-badge-sync-unknown'].every((cls) => source.includes(cls)),
+	'三态来源徽标样式类必须齐备'
+);
+assert.ok(source.includes('.feed||null'), '全局拦截路径必须把 feed 状态传入确认弹窗');
+console.log('  ✓ 官方更新源三态徽标与弹窗 pending 禁用接线齐备');
+
 console.log('🎉 Client 端插槽契约、更新控制与左下角全局拦截测试全部通过！');

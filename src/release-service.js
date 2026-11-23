@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { FeedProbeService, deriveSyncStates } from './feed-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -189,6 +190,7 @@ export class ReleaseService {
 		this.seedFile = options.seedFile || join(__dirname, 'seed-releases.json');
 		this.cachedStaticData = null;
 		this.detectVersionFn = options.detectVersionFn || detectHostVersion;
+		this.feedProbe = options.feedProbe || new FeedProbeService();
 	}
 
 	/**
@@ -240,6 +242,7 @@ export class ReleaseService {
 				etag: data.etag || null,
 				lastModified: data.lastModified || null,
 				lastFetchedAt: data.lastFetchedAt || Date.now(),
+				feed: data.feed || null,
 				releases: strippedReleases,
 			};
 			writeFileSync(this.cacheFile, JSON.stringify(payloadToSave, null, 2), 'utf8');
@@ -278,10 +281,17 @@ export class ReleaseService {
 	assemblePayload(staticData = {}, source = 'network') {
 		const currentVersion = this.detectVersionFn();
 		const formattedReleases = this.formatRawReleases(staticData.releases || []);
+		const feedState = staticData.feed || null;
+		const syncStates = deriveSyncStates(
+			feedState && feedState.state === 'ok' ? feedState.version : null,
+			formattedReleases,
+			compareSemver
+		);
 
-		const releases = formattedReleases.map((item) => ({
+		const releases = formattedReleases.map((item, idx) => ({
 			...item,
 			isCurrent: normalizeVersion(item.version) === normalizeVersion(currentVersion),
+			syncState: syncStates[idx],
 		}));
 
 		const latestRelease = releases[0] || null;
@@ -294,6 +304,16 @@ export class ReleaseService {
 			latestVersion,
 			hasUpdate,
 			source,
+			feed: feedState
+				? {
+						state: feedState.state,
+						version: feedState.version,
+						stagingPercentage: feedState.stagingPercentage ?? null,
+						channel: feedState.channel,
+						reason: feedState.reason,
+						lastFetchedAt: feedState.lastFetchedAt,
+					}
+				: null,
 			etag: staticData.etag || null,
 			lastModified: staticData.lastModified || null,
 			lastFetchedAt: staticData.lastFetchedAt || Date.now(),
@@ -314,9 +334,18 @@ export class ReleaseService {
 
 		// 2. 检查磁盘缓存
 		const diskCache = this.readDiskCache();
+		if (diskCache?.feed) this.feedProbe.hydrate(diskCache.feed);
 		if (!force && diskCache && now - (diskCache.lastFetchedAt || 0) < this.ttlMs) {
 			this.cachedStaticData = diskCache;
 			return this.assemblePayload(diskCache, 'disk');
+		}
+
+		// 2.5 feed 探针：独立于 releases 主流程，任何异常静默降级 unknown，不影响列表返回（AC4）
+		let feedState = null;
+		try {
+			feedState = await this.feedProbe.ensureFresh(force);
+		} catch (err) {
+			console.warn('[ReleaseService] Feed probe failed:', err?.message ?? err);
 		}
 
 		// 3. 发起网络请求获取最新 Releases（带 ETag 条件请求）
@@ -339,6 +368,7 @@ export class ReleaseService {
 
 			// 304 未更改：直接续期现有缓存并动态装配返回
 			if (response.status === 304 && diskCache) {
+				diskCache.feed = feedState;
 				diskCache.lastFetchedAt = now;
 				this.writeDiskCache(diskCache);
 				this.cachedStaticData = diskCache;
@@ -355,6 +385,7 @@ export class ReleaseService {
 						etag,
 						lastModified,
 						lastFetchedAt: now,
+						feed: feedState,
 						releases: this.formatRawReleases(json),
 					};
 
@@ -372,6 +403,7 @@ export class ReleaseService {
 		// 4. 网络失败或被限流：回退到磁盘缓存
 		if (diskCache) {
 			this.cachedStaticData = diskCache;
+			diskCache.feed = feedState;
 			const stalePayload = this.assemblePayload(diskCache, 'fallback-disk');
 			stalePayload.isStale = true;
 			return stalePayload;
@@ -381,6 +413,7 @@ export class ReleaseService {
 		const seedData = this.loadSeedData();
 		const fallbackStaticData = {
 			lastFetchedAt: now,
+			feed: feedState,
 			releases: this.formatRawReleases(seedData),
 		};
 		this.cachedStaticData = fallbackStaticData;

@@ -80,7 +80,13 @@ const statusRes = await simulateRequest('/changelog-viewer/status');
 assert.equal(statusRes.statusCode, 200);
 assert.equal(statusRes.data.ok, true);
 assert.ok(statusRes.data.releaseCount > 0);
-console.log(`  ✓ GET /changelog-viewer/status 正常 (版本总数: ${statusRes.data.releaseCount})`);
+assert.ok('feed' in statusRes.data, 'status 必须透传官方更新源探针结果 (cl-CHG-003)');
+if (statusRes.data.feed?.state === 'ok') {
+	assert.match(statusRes.data.feed.version, /^\d+\.\d+\.\d+/, 'feed 探测版本必须符合 semver');
+}
+console.log(
+	`  ✓ GET /changelog-viewer/status 正常 (版本总数: ${statusRes.data.releaseCount}, feed: ${statusRes.data.feed?.state ?? 'null'}${statusRes.data.feed?.version ? ` v${statusRes.data.feed.version}` : ''})`
+);
 
 // 4. 测试 404 分支
 const notFoundRes = await simulateRequest('/changelog-viewer/non-existent');

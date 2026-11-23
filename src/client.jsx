@@ -119,10 +119,27 @@ function MarkdownView({ content = '' }) {
 /**
  * 新版本更新前置确认弹窗
  */
-function UpdateConfirmModal({ release, onClose, onConfirm }) {
+function UpdateConfirmModal({ release, feed, onClose, onConfirm }) {
 	const [confirming, setConfirming] = useState(false);
 
 	if (!release) return null;
+
+	// 官方更新源同步状态（cl-CHG-003）：pending 禁止放行，pushed 照常两阶段，unknown 静默降级放行
+	const feedVersion = feed?.version || null;
+	const staging = feed?.stagingPercentage;
+	const syncState = release.syncState || 'unknown';
+
+	let feedNotice;
+	if (syncState === 'pending') {
+		feedNotice = `官方更新源尚未推送此版本（更新源当前 ${feedVersion ? `v${feedVersion}` : '版本未知'}）。现在确认下载会提示「已是最新版本」，建议稍后官方推送同步后再来更新。`;
+	} else if (syncState === 'pushed') {
+		const feedParts = [];
+		if (feedVersion && feedVersion !== release.version) feedParts.push(`更新源当前提供 v${feedVersion}`);
+		if (typeof staging === 'number' && staging < 100) feedParts.push(`灰度推送中（${staging}%），本机可能暂不可见`);
+		feedNotice = `官方更新源已推送${feedParts.length ? `：${feedParts.join('，')}` : ''}，确认后将由官方更新器执行下载。`;
+	} else {
+		feedNotice = '暂未能探测官方更新源状态（网络受限时常见），将按现有流程继续执行。';
+	}
 
 	const handleConfirm = async () => {
 		setConfirming(true);
@@ -144,6 +161,11 @@ function UpdateConfirmModal({ release, onClose, onConfirm }) {
 				<div className="cl-modal-body">
 					<div className="cl-modal-notice">
 						<strong>升级把控提醒：</strong> 为避免意外不兼容，请先审阅本次更新改动，确认符合预期后再开始下载升级。
+					</div>
+
+					<div className="cl-modal-notice cl-modal-notice-feed">
+						<strong>官方更新源：</strong>
+						{feedNotice}
 					</div>
 
 					<div className="cl-highlights-title">✨ 本次更新核心重点：</div>
@@ -168,8 +190,12 @@ function UpdateConfirmModal({ release, onClose, onConfirm }) {
 					<button className="cl-btn cl-btn-secondary" onClick={onClose} disabled={confirming}>
 						暂不更新
 					</button>
-					<button className="cl-btn cl-btn-primary" onClick={handleConfirm} disabled={confirming}>
-						{confirming ? '正在准备下载...' : '确认下载并更新'}
+					<button
+						className="cl-btn cl-btn-primary"
+						onClick={handleConfirm}
+						disabled={confirming || syncState === 'pending'}
+					>
+						{syncState === 'pending' ? '尚未推送，暂不可更新' : confirming ? '正在准备下载...' : '确认下载并更新'}
 					</button>
 				</div>
 			</div>
@@ -382,11 +408,20 @@ function ChangelogSettingsSection() {
 							<span className="cl-status-label">官方最新:</span>
 							<span className="cl-version-pill">
 								{latestRelease.name || latestRelease.version}
-								{hasNewVersion ? (
-									<span className="cl-badge cl-badge-latest">可更新</span>
-								) : (
-									<span className="cl-badge cl-badge-current">已是最新</span>
-								)}
+						{hasNewVersion ? (
+							<span className="cl-badge cl-badge-latest">可更新</span>
+						) : (
+							<span className="cl-badge cl-badge-current">已是最新</span>
+						)}
+						{hasNewVersion && latestRelease.syncState === 'pushed' && (
+							<span className="cl-badge cl-badge-sync-pushed">已入更新源</span>
+						)}
+						{hasNewVersion && latestRelease.syncState === 'pending' && (
+							<span className="cl-badge cl-badge-sync-pending">源未推送</span>
+						)}
+						{hasNewVersion && (!latestRelease.syncState || latestRelease.syncState === 'unknown') && (
+							<span className="cl-badge cl-badge-sync-unknown">源状态未知</span>
+						)}
 							</span>
 						</div>
 					)}
@@ -415,9 +450,21 @@ function ChangelogSettingsSection() {
 							<span>🚀</span>
 							<span>发现 DSH 官方新版本：{latestRelease.name || latestRelease.version}</span>
 							{latestRelease.isPrerelease && <span className="cl-badge cl-badge-rc">Pre-release</span>}
+							{latestRelease.syncState === 'pushed' && (
+								<span className="cl-badge cl-badge-sync-pushed">已入更新源</span>
+							)}
+							{latestRelease.syncState === 'pending' && (
+								<span className="cl-badge cl-badge-sync-pending">源未推送</span>
+							)}
+							{(!latestRelease.syncState || latestRelease.syncState === 'unknown') && (
+								<span className="cl-badge cl-badge-sync-unknown">源状态未知</span>
+							)}
 						</div>
 						<div className="cl-update-card-desc">
 							官方已发布新版本。建议先查阅更新重点与变动说明，再确认是否下载升级。
+							{latestRelease.syncState === 'pending' && data?.feed?.version
+								? `（官方更新源尚未推送，源上当前 v${data.feed.version}，现在确认更新会提示已是最新。）`
+								: ''}
 						</div>
 					</div>
 					<button className="cl-btn-primary" onClick={() => setShowUpdateModal(true)}>
@@ -491,6 +538,7 @@ function ChangelogSettingsSection() {
 			{showUpdateModal && (
 				<UpdateConfirmModal
 					release={latestRelease}
+					feed={data?.feed}
 					onClose={() => setShowUpdateModal(false)}
 					onConfirm={triggerDesktopUpdate}
 				/>
@@ -559,10 +607,11 @@ export function openGlobalUpdateConfirmation(targetRelease = null, customOnConfi
 		}
 	};
 
-	const renderModal = (rel) => {
+	const renderModal = (rel, feedState = null) => {
 		root.render(
 			<UpdateConfirmModal
 				release={rel}
+				feed={feedState}
 				onClose={handleClose}
 				onConfirm={executeConfirm}
 			/>
@@ -572,7 +621,7 @@ export function openGlobalUpdateConfirmation(targetRelease = null, customOnConfi
 	if (targetRelease) {
 		renderModal(targetRelease);
 	} else {
-		// 动态拉取官方最新 Release 信息
+		// 动态拉取官方最新 Release 信息（含官方更新源同步状态）
 		fetch('/changelog-viewer/releases')
 			.then((res) => res.json())
 			.then((json) => {
@@ -582,7 +631,7 @@ export function openGlobalUpdateConfirmation(targetRelease = null, customOnConfi
 					highlights: ['发现新版本，请确认升级以获得最新特性与稳定性修复。'],
 					publishedAt: new Date().toISOString(),
 				};
-				renderModal(latest);
+				renderModal(latest, json.feed || null);
 			})
 			.catch(() => {
 				renderModal({

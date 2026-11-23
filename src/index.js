@@ -54,6 +54,7 @@ export function apply(ctx) {
 								currentVersion: data.currentVersion,
 								latestVersion: data.latestVersion,
 								hasUpdate: data.hasUpdate,
+								feed: data.feed,
 							});
 						}
 

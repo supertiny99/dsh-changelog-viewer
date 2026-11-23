@@ -42,7 +42,11 @@ DSH（DeepSeek Harness）客户端版本更新日志与更新前置确认插件�
 5. **宿主真实版本动态探针与重启瞬时自愈**：
    - 集成系统级 App Bundle 清单（macOS Info.plist / Windows 清单）与官方包运行时依赖动态解析；
    - 磁盘缓存与运行时状态彻底解耦，升级并重启应用后瞬时刷新当前安装版本，无感知自愈。
-6. **官方规范与双主题自适应**：
+6. **官方更新源同步状态探针（三态来源标注）**：
+   - 官方存在两个发布渠道：GitHub Releases（公告渠道，先发）与 `download.deepseek.com` 更新源（分发渠道，滞后同步）——公告先行期"确认更新"必然得到"已是最新版本"；
+   - 只读探针按宿主 `app-update.yml` 实际通道（`<channel>-mac.yml`）探测更新源当前版本，逐条标注三态：**已入更新源 / 源未推送 / 源状态未知**（含官方灰度推送提示）；
+   - 最新版本"源未推送"时，确认弹窗明示更新源进度并锁定下载按钮，杜绝"点了却说已是最新"的预期落差；探测失败静默降级为未知，不影响任何既有流程。
+7. **官方规范与双主题自适应**：
    - 严格遵守 `docs/ui-style-guide.md` 规范，所有色值基于 `--dsw-alias-*` token 别名层；
    - 自适应 DSH 浅色与深色主题，文字黑白清晰高对比，排版无截断断行。
 
@@ -60,20 +64,20 @@ DSH（DeepSeek Harness）客户端版本更新日志与更新前置确认插件�
 
 或指定特定版本号：
 ```
-@supertiny99/dsh-changelog-viewer@0.1.2
+@supertiny99/dsh-changelog-viewer@0.1.3
 ```
 
 ### 2. GitHub（源码 / Tag 安装）
 
 ```
-github:supertiny99/dsh-changelog-viewer#v0.1.2
+github:supertiny99/dsh-changelog-viewer#v0.1.3
 ```
 
 ### 3. tarball（本地离线分发）
 
 从 [GitHub Releases](https://github.com/supertiny99/dsh-changelog-viewer/releases) 下载 `.tgz` 产物后填入本地绝对路径：
 ```
-file:/<你的本地绝对路径>/supertiny99-dsh-changelog-viewer-0.1.2.tgz
+file:/<你的本地绝对路径>/supertiny99-dsh-changelog-viewer-0.1.3.tgz
 ```
 
 > **环境要求**：DSH `>= 0.2.1-rc.5`（`engines.dsh` 自动合规校验）。  
